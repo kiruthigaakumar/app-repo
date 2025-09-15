@@ -1,30 +1,40 @@
-name: Build and Push Docker Image
+name: Task6 CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: ["main"]
 
 jobs:
-  docker:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout code
-      - name: Checkout Repository
+      - name: Checkout app repo
         uses: actions/checkout@v3
 
-      # Log in to Docker Hub
-      - name: Login to Docker Hub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build and push Docker image
-      - name: Build and Push Docker Image
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/xops-app:${{ github.sha }} .
+
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/xops-app:${{ github.sha }}
+
+      - name: Clone infra repo
         run: |
-          IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/my-app
-          TAG=${GITHUB_SHA::7}
-          docker build -t $IMAGE_NAME:$TAG .
-          docker push $IMAGE_NAME:$TAG
+          git clone https://github.com/Karthikeyan-Jl/xops-infra.git
+          cd xops-infra/k8s
+          sed -i "s|image:.*|image: ${{ secrets.DOCKER_USERNAME }}/xops-app:${{ github.sha }}|" deployment.yaml
+
+      - name: Commit and push to infra repo
+        run: |
+          cd xops-infra
+          git config --global user.name "kiruthigaakumar"
+          git config --global user.email "collegermk2024@gmail.com"
+          git add .
+          git commit -m "Update image to ${{ secrets.DOCKER_USERNAME }}/xops-app:${{ github.sha }}"
+          git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/kiruthigaakumar/infra-repo HEAD:main
